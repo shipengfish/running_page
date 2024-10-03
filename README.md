@@ -925,7 +925,7 @@ Take the keep app as an example. Close the app after running, and then automatic
 1. Get actions id (need to apply token)
 
 ```bash
-curl https://api.github.com/repos/yihong0618/running_page/actions/workflows -H "Authorization: token d8xxxxxxxxxx" # change to your config
+curl https://api.github.com/repos/shipengfish/running_page/actions/workflows -H "Authorization: token d8xxxxxxxxxx" # change to your config
 ```
 
 <center><img src="https://cdn.jujimeizuo.cn/blog/2023/10/get-action-id.jpg" alt="get-action-id"></center>
