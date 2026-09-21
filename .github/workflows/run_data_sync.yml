@@ -44,6 +44,10 @@ env:
   SAVE_TO_PARQENT: false # If you want to save the data to the repo, set it to `true`
   GENERATE_MONTH_OF_LIFE: false # If you want to generate the month of life, set it to `true`
   BIRTHDAY_MONTH: 1989-03 # If you want to generate the month of life, set it to your birthday month, format is YYYY-MM
+  # Huawei Health has no official API. Bridge via Intervals.icu (Huawei Health Service Kit).
+  # Requires GitHub secrets INTERVALS_ICU_ATHLETE_ID and INTERVALS_ICU_API_KEY.
+  # Skips automatically if secrets are empty so Garmin sync still runs.
+  HUAWEI_BRIDGE: intervals_icu
 
 jobs:
   sync:
@@ -227,9 +231,22 @@ jobs:
       - name: Run sync Intervals.icu script
         if: env.RUN_TYPE == 'intervals_icu'
         run: |
-          python run_page/intervals_icu_sync.py ${{ secrets.INTERVALS_ICU_ATHLETE_ID }} ${{ secrets.INTERVALS_ICU_API_KEY }}
+          python run_page/intervals_icu_sync.py ${{ secrets.INTERVALS_ICU_ATHLETE_ID }} ${{ secrets.INTERVALS_ICU_API_KEY }} --gcj02
         # Default syncs running activities only. To sync all types add --all
         # To change start date: --start-date 2020-01-01 (default: 2015-01-01)
+        # --gcj02 converts Huawei/China GCJ-02 coordinates to WGS-84
+
+      - name: Run Huawei Health via Intervals.icu
+        if: env.HUAWEI_BRIDGE == 'intervals_icu' && env.RUN_TYPE != 'intervals_icu'
+        env:
+          INTERVALS_ICU_ATHLETE_ID: ${{ secrets.INTERVALS_ICU_ATHLETE_ID }}
+          INTERVALS_ICU_API_KEY: ${{ secrets.INTERVALS_ICU_API_KEY }}
+        run: |
+          if [ -z "$INTERVALS_ICU_ATHLETE_ID" ] || [ -z "$INTERVALS_ICU_API_KEY" ]; then
+            echo "Skip Huawei sync: set INTERVALS_ICU_ATHLETE_ID and INTERVALS_ICU_API_KEY"
+            exit 0
+          fi
+          python run_page/intervals_icu_sync.py "$INTERVALS_ICU_ATHLETE_ID" "$INTERVALS_ICU_API_KEY" --gcj02 --start-date 2015-01-01
 
       - name: Run db updater script to add 'Elevation Gain' field to db
         if: env.RUN_TYPE == 'db_updater'
