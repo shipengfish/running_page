@@ -75,7 +75,10 @@ export default function AdminPage() {
       config: RunningPageConfig;
       githubConfigured: boolean;
     }>('/api/admin/config', nextToken);
-    setConfig(data.config);
+    setConfig({
+      ...data.config,
+      sync: { ...data.config.sync, huaweiBridge: 'none' },
+    });
     setGithubConfigured(data.githubConfigured);
   };
 
@@ -506,7 +509,7 @@ export default function AdminPage() {
         <section className={cardClass}>
           <h2 className="text-base font-semibold">同步策略</h2>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
-            对应 GitHub Actions 环境变量。佳明用 garmin_cn，华为走悦跑圈桥接。
+            对应 GitHub Actions 环境变量。当前只同步佳明国区（garmin_cn）。
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <Field label="主数据源 RUN_TYPE">
@@ -520,25 +523,6 @@ export default function AdminPage() {
                   }))
                 }
               />
-            </Field>
-            <Field label="华为桥接">
-              <select
-                className={inputClass}
-                value={config.sync.huaweiBridge}
-                onChange={(event) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    sync: {
-                      ...prev.sync,
-                      huaweiBridge: event.target
-                        .value as RunningPageConfig['sync']['huaweiBridge'],
-                    },
-                  }))
-                }
-              >
-                <option value="joyrun">悦跑圈</option>
-                <option value="none">关闭</option>
-              </select>
             </Field>
             <Field label="Athlete">
               <input

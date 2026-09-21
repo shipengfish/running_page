@@ -45,10 +45,8 @@ env:
   SAVE_TO_PARQENT: false # If you want to save the data to the repo, set it to `true`
   GENERATE_MONTH_OF_LIFE: false # If you want to generate the month of life, set it to `true`
   BIRTHDAY_MONTH: 1989-03 # If you want to generate the month of life, set it to your birthday month, format is YYYY-MM
-  # Huawei Health has no official API. Bridge via Joyrun (悦跑圈) device binding.
-  # First login locally with SMS to print uid/sid, then set GitHub secrets JOYRUN_UID and JOYRUN_SID.
-  # Skips automatically if secrets are empty so Garmin sync still runs.
-  HUAWEI_BRIDGE: joyrun
+  # Huawei Health has no official API. Keep none — Garmin CN is the only live source.
+  HUAWEI_BRIDGE: none
 
 jobs:
   sync:
@@ -221,7 +219,7 @@ jobs:
         if: env.RUN_TYPE == 'tulipsport'
         run: |
           python run_page/tulipsport_sync.py ${{ secrets.TULIPSPORT_TOKEN }} --with-gpx
- 
+
       - name: Run sync Oppo heytap script, note currently this script is not worked
         if: env.RUN_TYPE == 'oppo'
         run: |
@@ -236,19 +234,6 @@ jobs:
         # Default syncs running activities only. To sync all types add --all
         # To change start date: --start-date 2020-01-01 (default: 2015-01-01)
         # --gcj02 converts Huawei/China GCJ-02 coordinates to WGS-84
-
-      - name: Run Huawei Health via Joyrun
-        if: env.HUAWEI_BRIDGE == 'joyrun'
-        continue-on-error: true
-        env:
-          JOYRUN_UID: ${{ secrets.JOYRUN_UID }}
-          JOYRUN_SID: ${{ secrets.JOYRUN_SID }}
-        run: |
-          if [ -z "$JOYRUN_UID" ] || [ -z "$JOYRUN_SID" ]; then
-            echo "Skip Huawei/Joyrun sync: set JOYRUN_UID and JOYRUN_SID"
-            exit 0
-          fi
-          python run_page/joyrun_sync.py "$JOYRUN_UID" "$JOYRUN_SID" --from-uid-sid --with-gpx --athlete "${{ env.ATHLETE }}"
 
       - name: Run db updater script to add 'Elevation Gain' field to db
         if: env.RUN_TYPE == 'db_updater'

@@ -85,6 +85,7 @@ const readConfig = async (env: Env): Promise<RunningPageConfig> => {
     sync: {
       ...DEFAULT_CONFIG.sync,
       ...(stored as RunningPageConfig).sync,
+      huaweiBridge: 'none',
     },
   };
 };
@@ -296,66 +297,64 @@ export default {
 };
 
 const handle = async (request: Request, env: Env): Promise<Response> => {
-    const url = new URL(request.url);
+  const url = new URL(request.url);
 
-    if (url.pathname === '/api/health') {
-      return json({ ok: true });
+  if (url.pathname === '/api/health') {
+    return json({ ok: true });
+  }
+
+  if (url.pathname === '/api/public-config' && request.method === 'GET') {
+    const config = await readConfig(env);
+    return json({ config: publicConfig(config) });
+  }
+
+  if (url.pathname === '/api/admin/session' && request.method === 'POST') {
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
+    return json({ ok: true });
+  }
+
+  if (url.pathname === '/api/admin/config' && request.method === 'GET') {
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
+    const config = await readConfig(env);
+    return json({
+      config,
+      githubConfigured: Boolean(env.GITHUB_TOKEN),
+      secrets: {
+        GARMIN_SECRET_STRING_CN: false,
+        MAPBOX_TOKEN: false,
+      },
+    });
+  }
+
+  if (url.pathname === '/api/admin/config' && request.method === 'PUT') {
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
+    const body = (await request.json()) as {
+      config?: RunningPageConfig;
+      secrets?: SecretUpdates;
+      applyToGithub?: boolean;
+    };
+    if (!body.config) return json({ error: '缺少 config' }, 400);
+    body.config = {
+      ...body.config,
+      sync: { ...body.config.sync, huaweiBridge: 'none' },
+    };
+    await env.CONFIG.put(CONFIG_KEY, JSON.stringify(body.config));
+    let githubFiles: string[] = [];
+    if (body.applyToGithub) {
+      githubFiles = await applyToGithub(env, body.config, body.secrets ?? {});
     }
+    return json({ ok: true, githubFiles });
+  }
 
-    if (url.pathname === '/api/public-config' && request.method === 'GET') {
-      const config = await readConfig(env);
-      return json({ config: publicConfig(config) });
-    }
+  if (url.pathname === '/api/admin/sync' && request.method === 'POST') {
+    const denied = requireAdmin(request, env);
+    if (denied) return denied;
+    await dispatchSync(env);
+    return json({ ok: true });
+  }
 
-    if (url.pathname === '/api/admin/session' && request.method === 'POST') {
-      const denied = requireAdmin(request, env);
-      if (denied) return denied;
-      return json({ ok: true });
-    }
-
-    if (url.pathname === '/api/admin/config' && request.method === 'GET') {
-      const denied = requireAdmin(request, env);
-      if (denied) return denied;
-      const config = await readConfig(env);
-      return json({
-        config,
-        githubConfigured: Boolean(env.GITHUB_TOKEN),
-        secrets: {
-          GARMIN_SECRET_STRING_CN: false,
-          JOYRUN_UID: false,
-          JOYRUN_SID: false,
-          MAPBOX_TOKEN: false,
-        },
-      });
-    }
-
-    if (url.pathname === '/api/admin/config' && request.method === 'PUT') {
-      const denied = requireAdmin(request, env);
-      if (denied) return denied;
-      const body = (await request.json()) as {
-        config?: RunningPageConfig;
-        secrets?: SecretUpdates;
-        applyToGithub?: boolean;
-      };
-      if (!body.config) return json({ error: '缺少 config' }, 400);
-      await env.CONFIG.put(CONFIG_KEY, JSON.stringify(body.config));
-      let githubFiles: string[] = [];
-      if (body.applyToGithub) {
-        githubFiles = await applyToGithub(
-          env,
-          body.config,
-          body.secrets ?? {}
-        );
-      }
-      return json({ ok: true, githubFiles });
-    }
-
-    if (url.pathname === '/api/admin/sync' && request.method === 'POST') {
-      const denied = requireAdmin(request, env);
-      if (denied) return denied;
-      await dispatchSync(env);
-      return json({ ok: true });
-    }
-
-    return json({ error: 'not found' }, 404);
+  return json({ error: 'not found' }, 404);
 };

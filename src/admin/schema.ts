@@ -1,7 +1,7 @@
 export type LocaleOption = 'zh' | 'en';
 export type ThemeOption = 'light' | 'dark' | 'system';
 export type ThemePreset = 'dashboard' | 'classic';
-export type HuaweiBridge = 'joyrun' | 'none';
+export type HuaweiBridge = 'none';
 
 export interface NavLinkConfig {
   name: string;
@@ -43,8 +43,6 @@ export interface RunningPageConfig {
 
 export interface SecretUpdates {
   GARMIN_SECRET_STRING_CN?: string;
-  JOYRUN_UID?: string;
-  JOYRUN_SID?: string;
   MAPBOX_TOKEN?: string;
 }
 
@@ -80,7 +78,7 @@ export const DEFAULT_CONFIG: RunningPageConfig = {
     minGridDistance: 10,
     titleGrid: 'Over 10km Runs',
     useCloudflareWarp: false,
-    huaweiBridge: 'joyrun',
+    huaweiBridge: 'none',
     ignoreStartEndRange: 10,
   },
 };
@@ -94,16 +92,6 @@ export const SECRET_FIELDS: {
     key: 'GARMIN_SECRET_STRING_CN',
     label: '佳明国区密钥',
     hint: '本机 python run_page/get_garmin_secret.py 邮箱 密码 --is-cn 的输出',
-  },
-  {
-    key: 'JOYRUN_UID',
-    label: '悦跑圈 UID',
-    hint: 'joyrun_sync 登录成功后打印的 uid',
-  },
-  {
-    key: 'JOYRUN_SID',
-    label: '悦跑圈 SID',
-    hint: '单设备有效；手机再登录会失效',
   },
   {
     key: 'MAPBOX_TOKEN',
