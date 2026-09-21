@@ -37,6 +37,58 @@ const publicConfig = (config: RunningPageConfig) => ({
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), { status, headers: jsonHeaders });
 
+const TILE_PATH = /^\/api\/tiles\/(gaode|gaode-dark|osm)\/(\d+)\/(\d+)\/(\d+)$/;
+
+const tileUpstream = (
+  source: string,
+  z: number,
+  x: number,
+  y: number
+): string => {
+  if (source === 'osm') {
+    return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+  }
+  const shard = (x % 4) + 1;
+  const style = source === 'gaode-dark' ? 7 : 8;
+  return `https://webrd0${shard}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=${style}&x=${x}&y=${y}&z=${z}`;
+};
+
+const proxyTile = async (request: Request, url: URL): Promise<Response> => {
+  const match = url.pathname.match(TILE_PATH);
+  if (!match) return json({ error: 'invalid tile path' }, 400);
+  const source = match[1];
+  const z = Number(match[2]);
+  const x = Number(match[3]);
+  const y = Number(match[4]);
+  if (!Number.isInteger(z) || z < 0 || z > 18) {
+    return json({ error: 'invalid zoom' }, 400);
+  }
+  const max = 2 ** z;
+  if (x < 0 || y < 0 || x >= max || y >= max) {
+    return json({ error: 'invalid tile' }, 400);
+  }
+  const upstream = await fetch(tileUpstream(source, z, x, y), {
+    headers: {
+      Referer: 'https://www.amap.com/',
+      'User-Agent':
+        request.headers.get('User-Agent') ||
+        'Mozilla/5.0 (compatible; huanxi-running-map/1.0)',
+    },
+    cf: { cacheTtl: 86400, cacheEverything: true },
+  } as RequestInit);
+  if (!upstream.ok) {
+    return new Response(null, { status: upstream.status });
+  }
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      'Content-Type': upstream.headers.get('Content-Type') || 'image/png',
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+};
+
 const timingSafeEqual = (left: string, right: string): boolean => {
   const encoder = new TextEncoder();
   const a = encoder.encode(left);
@@ -301,6 +353,10 @@ const handle = async (request: Request, env: Env): Promise<Response> => {
 
   if (url.pathname === '/api/health') {
     return json({ ok: true });
+  }
+
+  if (TILE_PATH.test(url.pathname) && request.method === 'GET') {
+    return proxyTile(request, url);
   }
 
   if (url.pathname === '/api/public-config' && request.method === 'GET') {

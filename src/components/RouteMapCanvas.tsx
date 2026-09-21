@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import {
+  FullscreenControl,
+  GeoJSONSource,
+  LngLatBounds,
+  Map as MapLibreMap,
+  NavigationControl,
+  ScaleControl,
+  type CameraOptions,
+  type ErrorEvent,
+  type StyleSpecification,
+} from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import * as polyline from '@mapbox/polyline';
 import type { Activity } from '../types';
-import { MAPBOX_TOKEN } from '../config';
 import { useLocale } from '../hooks/useLocale';
 import './RouteMap.css';
 
@@ -23,6 +32,62 @@ const routeCache = new WeakMap<
   }[]
 >();
 
+const rasterStyle = (
+  tiles: string[],
+  background: string,
+  attribution: string
+): StyleSpecification => ({
+  version: 8,
+  sources: {
+    raster: {
+      type: 'raster',
+      tiles,
+      tileSize: 256,
+      attribution,
+      maxzoom: 18,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': background },
+    },
+    { id: 'raster', type: 'raster', source: 'raster' },
+  ],
+});
+
+type BasemapId = 'gaode' | 'openfreemap' | 'osm';
+
+const BASEMAP_ORDER: BasemapId[] = ['gaode', 'osm', 'openfreemap'];
+
+const styleFor = (
+  id: BasemapId,
+  dark: boolean
+): string | StyleSpecification => {
+  if (id === 'gaode') {
+    return rasterStyle(
+      [
+        dark
+          ? '/api/tiles/gaode-dark/{z}/{x}/{y}'
+          : '/api/tiles/gaode/{z}/{x}/{y}',
+      ],
+      dark ? '#1c1c1c' : '#f4f4f0',
+      '© 高德地图'
+    );
+  }
+  if (id === 'openfreemap') {
+    return dark
+      ? 'https://tiles.openfreemap.org/styles/dark'
+      : 'https://tiles.openfreemap.org/styles/positron';
+  }
+  return rasterStyle(
+    ['/api/tiles/osm/{z}/{x}/{y}'],
+    dark ? '#0e0e0e' : '#fafafa',
+    '© OpenStreetMap'
+  );
+};
+
 export function RouteMapCanvas({
   activities,
   selectedActivity,
@@ -33,19 +98,17 @@ export function RouteMapCanvas({
   const zh = locale === 'zh';
   const panelRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const styleReadyRef = useRef(false);
-  const cameraRef = useRef<mapboxgl.CameraOptions | null>(null);
+  const cameraRef = useRef<CameraOptions | null>(null);
   const fittedRef = useRef<unknown>(null);
-  const [provider, setProvider] = useState(MAPBOX_TOKEN ? 'mapbox' : 'carto');
+  const [provider, setProvider] = useState<BasemapId>('gaode');
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading'
   );
   const [retry, setRetry] = useState(0);
-  const style =
-    provider === 'mapbox'
-      ? `mapbox://styles/mapbox/${dark === false ? 'light' : 'dark'}-v11`
-      : `https://basemaps.cartocdn.com/gl/${dark === false ? 'positron' : 'dark-matter'}-gl-style/style.json`;
+  const isDark = dark !== false;
+  const style = useMemo(() => styleFor(provider, isDark), [provider, isDark]);
 
   const routes = useMemo(() => {
     const items = selectedActivity ? [selectedActivity] : activities;
@@ -81,7 +144,7 @@ export function RouteMapCanvas({
   }, [activities, selectedActivity]);
 
   const routeBounds = useMemo(() => {
-    const bounds = new mapboxgl.LngLatBounds();
+    const bounds = new LngLatBounds();
     for (const route of routes) {
       for (const coord of route.geometry.coordinates)
         bounds.extend(coord as [number, number]);
@@ -105,8 +168,7 @@ export function RouteMapCanvas({
     const map = mapRef.current;
     if (!map || !styleReadyRef.current) return;
     const data = { type: 'FeatureCollection' as const, features: routes };
-    const source = map.getSource('routes') as
-      mapboxgl.GeoJSONSource | undefined;
+    const source = map.getSource('routes') as GeoJSONSource | undefined;
     if (source) source.setData(data);
     else {
       map.addSource('routes', { type: 'geojson', data });
@@ -125,11 +187,19 @@ export function RouteMapCanvas({
             '#3b82f6',
             '#4dd2ff',
           ],
+          'line-width': selectedActivity ? 3.5 : 2,
+          'line-opacity': selectedActivity ? 1 : 0.7,
         },
       });
     }
-    map.setPaintProperty('routes', 'line-width', selectedActivity ? 3.5 : 2);
-    map.setPaintProperty('routes', 'line-opacity', selectedActivity ? 1 : 0.7);
+    if (map.getLayer('routes')) {
+      map.setPaintProperty('routes', 'line-width', selectedActivity ? 3.5 : 2);
+      map.setPaintProperty(
+        'routes',
+        'line-opacity',
+        selectedActivity ? 1 : 0.7
+      );
+    }
     if (fittedRef.current !== routes) {
       fittedRef.current = routes;
       fitRoutes();
@@ -138,10 +208,8 @@ export function RouteMapCanvas({
 
   useEffect(() => {
     if (!containerRef.current || !panelRef.current) return;
-    const map = new mapboxgl.Map({
+    const map = new MapLibreMap({
       container: containerRef.current,
-      accessToken: MAPBOX_TOKEN,
-      language: zh ? 'zh-Hans' : 'en',
       style: { version: 8, sources: {}, layers: [] },
       center: [121.4, 31.2],
       zoom: 10,
@@ -156,16 +224,16 @@ export function RouteMapCanvas({
             'FullscreenControl.Exit': '退出全屏',
             'AttributionControl.ToggleAttribution': '地图来源',
           }
-        : {},
+        : undefined,
     });
     mapRef.current = map;
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.addControl(new NavigationControl(), 'top-right');
     map.addControl(
-      new mapboxgl.FullscreenControl({ container: panelRef.current }),
+      new FullscreenControl({ container: panelRef.current }),
       'top-right'
     );
     map.addControl(
-      new mapboxgl.ScaleControl({ unit: 'metric', maxWidth: 90 }),
+      new ScaleControl({ unit: 'metric', maxWidth: 90 }),
       'bottom-left'
     );
     const observer = new ResizeObserver(() => map.resize());
@@ -187,44 +255,55 @@ export function RouteMapCanvas({
     const map = mapRef.current;
     if (!map) return;
     let failed = false;
-    const onError = (event: mapboxgl.ErrorEvent) => {
-      const code = (event.error as Error & { status?: number }).status;
-      if (provider === 'mapbox' && (code === 401 || code === 403)) {
-        setProvider('carto');
-      } else {
-        failed = true;
-        setStatus('error');
+    const fail = () => {
+      if (failed) return;
+      failed = true;
+      const index = BASEMAP_ORDER.indexOf(provider);
+      const next = BASEMAP_ORDER[index + 1];
+      if (next) {
+        setProvider(next);
+        return;
+      }
+      setStatus('error');
+    };
+    const onError = (event: ErrorEvent) => {
+      const message = event.error?.message || '';
+      if (/glyph|sprite|\.pbf|raster|tile/i.test(message)) return;
+      if (
+        /Failed to fetch|Could not load style|AJAXError|status (4|5)/i.test(
+          message
+        )
+      ) {
+        fail();
       }
     };
     const onIdle = () => {
-      if (!failed) setStatus('ready');
+      if (!failed && map.isStyleLoaded()) setStatus('ready');
     };
     const onLoading = () => setStatus('loading');
     map.on('error', onError);
     map.on('idle', onIdle);
     map.once('styledataloading', onLoading);
     styleReadyRef.current = false;
-    map.setStyle(style, {
-      diff: false,
-      localFontFamily: undefined,
-      localIdeographFontFamily: 'sans-serif',
-    });
+    setStatus('loading');
+    map.setStyle(style, { diff: false });
     const timer = window.setTimeout(() => {
-      if (!map.isStyleLoaded()) setStatus('error');
-    }, 15000);
+      if (!styleReadyRef.current) fail();
+    }, 12000);
     return () => {
       window.clearTimeout(timer);
       map.off('error', onError);
       map.off('idle', onIdle);
       map.off('styledataloading', onLoading);
     };
-  }, [style, provider, retry, zh]);
+  }, [style, provider, retry]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const onStyleLoad = () => {
       styleReadyRef.current = true;
+      setStatus('ready');
       drawRoutes();
     };
     map.on('style.load', onStyleLoad);
@@ -232,7 +311,7 @@ export function RouteMapCanvas({
     return () => {
       map.off('style.load', onStyleLoad);
     };
-  }, [drawRoutes, style, retry, zh]);
+  }, [drawRoutes, style, retry]);
 
   useEffect(() => {
     let wasFullscreen = document.fullscreenElement === panelRef.current;
@@ -254,6 +333,15 @@ export function RouteMapCanvas({
       document.removeEventListener('fullscreenchange', onFullscreen);
     };
   }, [fitRoutes]);
+
+  const providerLabel =
+    provider === 'gaode'
+      ? zh
+        ? '底图 · 高德'
+        : 'Basemap · Amap'
+      : provider === 'osm'
+        ? 'OpenStreetMap'
+        : 'OpenFreeMap';
 
   return (
     <section
@@ -313,29 +401,17 @@ export function RouteMapCanvas({
               ? zh
                 ? '正在加载地图…'
                 : 'Loading map…'
-              : provider === 'carto'
-                ? zh
-                  ? '备用底图 · CARTO'
-                  : 'Alternative basemap · CARTO'
-                : zh
-                  ? '底图 · Mapbox'
-                  : 'Basemap · Mapbox'}
+              : providerLabel}
         </span>
-        {(status === 'error' || (provider === 'carto' && !!MAPBOX_TOKEN)) && (
+        {status === 'error' && (
           <button
             className="route-map-action"
             onClick={() => {
-              setProvider(MAPBOX_TOKEN ? 'mapbox' : 'carto');
+              setProvider('gaode');
               setRetry((value) => value + 1);
             }}
           >
-            {provider === 'carto' && MAPBOX_TOKEN
-              ? zh
-                ? '重试 Mapbox'
-                : 'Retry Mapbox'
-              : zh
-                ? '重试'
-                : 'Retry'}
+            {zh ? '重试' : 'Retry'}
           </button>
         )}
       </div>
