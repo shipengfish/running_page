@@ -22,6 +22,7 @@ on:
       - run_page/keep_to_strava_sync.py
       - run_page/oppo_sync.py
       - run_page/intervals_icu_sync.py
+      - run_page/joyrun_sync.py
       - requirements.txt
 
 env:
@@ -44,10 +45,10 @@ env:
   SAVE_TO_PARQENT: false # If you want to save the data to the repo, set it to `true`
   GENERATE_MONTH_OF_LIFE: false # If you want to generate the month of life, set it to `true`
   BIRTHDAY_MONTH: 1989-03 # If you want to generate the month of life, set it to your birthday month, format is YYYY-MM
-  # Huawei Health has no official API. Bridge via Intervals.icu (Huawei Health Service Kit).
-  # Requires GitHub secrets INTERVALS_ICU_ATHLETE_ID and INTERVALS_ICU_API_KEY.
+  # Huawei Health has no official API. Bridge via Joyrun (悦跑圈) device binding.
+  # First login locally with SMS to print uid/sid, then set GitHub secrets JOYRUN_UID and JOYRUN_SID.
   # Skips automatically if secrets are empty so Garmin sync still runs.
-  HUAWEI_BRIDGE: intervals_icu
+  HUAWEI_BRIDGE: joyrun
 
 jobs:
   sync:
@@ -236,17 +237,17 @@ jobs:
         # To change start date: --start-date 2020-01-01 (default: 2015-01-01)
         # --gcj02 converts Huawei/China GCJ-02 coordinates to WGS-84
 
-      - name: Run Huawei Health via Intervals.icu
-        if: env.HUAWEI_BRIDGE == 'intervals_icu' && env.RUN_TYPE != 'intervals_icu'
+      - name: Run Huawei Health via Joyrun
+        if: env.HUAWEI_BRIDGE == 'joyrun'
         env:
-          INTERVALS_ICU_ATHLETE_ID: ${{ secrets.INTERVALS_ICU_ATHLETE_ID }}
-          INTERVALS_ICU_API_KEY: ${{ secrets.INTERVALS_ICU_API_KEY }}
+          JOYRUN_UID: ${{ secrets.JOYRUN_UID }}
+          JOYRUN_SID: ${{ secrets.JOYRUN_SID }}
         run: |
-          if [ -z "$INTERVALS_ICU_ATHLETE_ID" ] || [ -z "$INTERVALS_ICU_API_KEY" ]; then
-            echo "Skip Huawei sync: set INTERVALS_ICU_ATHLETE_ID and INTERVALS_ICU_API_KEY"
+          if [ -z "$JOYRUN_UID" ] || [ -z "$JOYRUN_SID" ]; then
+            echo "Skip Huawei/Joyrun sync: set JOYRUN_UID and JOYRUN_SID"
             exit 0
           fi
-          python run_page/intervals_icu_sync.py "$INTERVALS_ICU_ATHLETE_ID" "$INTERVALS_ICU_API_KEY" --gcj02 --start-date 2015-01-01
+          python run_page/joyrun_sync.py "$JOYRUN_UID" "$JOYRUN_SID" --from-uid-sid --with-gpx --athlete "${{ env.ATHLETE }}"
 
       - name: Run db updater script to add 'Elevation Gain' field to db
         if: env.RUN_TYPE == 'db_updater'

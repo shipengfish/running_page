@@ -388,3 +388,11 @@ class Generator:
             # pass the error
             print(f"something wrong with {e!s}")
             return []
+
+    def get_old_tracks_utc_dates(self):
+        try:
+            activities = self.session.query(Activity).all()
+            return [str(a.start_date) for a in activities if a.start_date]
+        except Exception as e:  # noqa: BLE001
+            print(f"something wrong with {e!s}")
+            return []

@@ -622,10 +622,25 @@ class Joyrun:
         return namedtuple("x", d.keys())(*d.values())
 
     def get_all_joyrun_tracks(
-        self, old_tracks_ids, with_gpx=False, with_tcx=False, threshold=10
+        self,
+        old_tracks_ids,
+        with_gpx=False,
+        with_tcx=False,
+        threshold=10,
+        old_tracks_dates=None,
     ):
         run_ids = self.get_runs_records_ids()
         old_tracks_ids = [int(i) for i in old_tracks_ids if i.isdigit()]
+        existing_starts = []
+        for raw in old_tracks_dates or []:
+            try:
+                existing_starts.append(
+                    datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007
+                )
+            except (TypeError, ValueError):
+                continue
+        # Garmin + Joyrun of the same outing can differ by a few minutes.
+        cross_source_threshold = max(threshold, 300)
 
         old_gpx_ids = os.listdir(GPX_FOLDER)
         old_gpx_ids = [i.split(".")[0] for i in old_gpx_ids if not i.startswith(".")]
@@ -634,10 +649,19 @@ class Joyrun:
         seen_runs = {}  # Dictionary to keep track of unique runs with start time as key
         for i in new_run_ids:
             run_data = self.get_single_run_record(i)
-            start_time = datetime.fromtimestamp(  # noqa: DTZ006
-                run_data["runrecord"]["starttime"]
-            )
+            start_time = datetime.fromtimestamp(
+                run_data["runrecord"]["starttime"], tz=UTC
+            ).replace(tzinfo=None)
             distance = run_data["runrecord"]["meter"]
+
+            if any(
+                abs((start_time - existing).total_seconds()) <= cross_source_threshold
+                for existing in existing_starts
+            ):
+                print(
+                    f"Skip Joyrun {i}: overlaps existing Garmin/DB activity at {start_time}"
+                )
+                continue
 
             is_duplicate = False
             for seen_start in list(seen_runs.keys()):
@@ -788,8 +812,13 @@ if __name__ == "__main__":
 
     generator = Generator(SQL_FILE)
     old_tracks_ids = generator.get_old_tracks_ids()
+    old_tracks_dates = generator.get_old_tracks_utc_dates()
     tracks = j.get_all_joyrun_tracks(
-        old_tracks_ids, options.with_gpx, options.with_tcx, options.threshold
+        old_tracks_ids,
+        options.with_gpx,
+        options.with_tcx,
+        options.threshold,
+        old_tracks_dates=old_tracks_dates,
     )
     generator.sync_from_app(tracks)
     activities_list = generator.load()
