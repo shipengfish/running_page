@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import '../themes/dashboard/index.css';
 import {
   DEFAULT_CONFIG,
@@ -17,7 +23,7 @@ const authHeaders = (token: string) => ({
 const api = async <T,>(
   path: string,
   token: string,
-  init?: RequestInit
+  init?: { method?: string; body?: string }
 ): Promise<T> => {
   const response = await fetch(path, {
     ...init,
@@ -41,13 +47,7 @@ const labelClass = 'mb-1 block text-xs font-medium text-[var(--color-muted)]';
 const cardClass =
   'rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-5';
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
       <span className={labelClass}>{label}</span>
@@ -58,7 +58,9 @@ function Field({
 
 export default function AdminPage() {
   const [tokenInput, setTokenInput] = useState('');
-  const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) || '');
+  const [token, setToken] = useState(
+    () => sessionStorage.getItem(TOKEN_KEY) || ''
+  );
   const [config, setConfig] = useState<RunningPageConfig>(DEFAULT_CONFIG);
   const [secrets, setSecrets] = useState<SecretUpdates>({});
   const [githubConfigured, setGithubConfigured] = useState(false);
@@ -131,7 +133,7 @@ export default function AdminPage() {
             : '已保存并尝试写回 GitHub'
         );
       } else {
-        setMessage('已保存到 Cloudflare KV。公开站点会在下次部署后更新。');
+        setMessage('已保存到 Cloudflare。首页会立即读取新的目标和站点信息。');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
@@ -195,9 +197,7 @@ export default function AdminPage() {
               />
             </Field>
           </div>
-          {error ? (
-            <p className="mt-3 text-sm text-red-600">{error}</p>
-          ) : null}
+          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
           <button
             type="submit"
             disabled={loading}
@@ -283,7 +283,8 @@ export default function AdminPage() {
                 onChange={(event) =>
                   updateAppearance(
                     'locale',
-                    event.target.value as RunningPageConfig['appearance']['locale']
+                    event.target
+                      .value as RunningPageConfig['appearance']['locale']
                   )
                 }
               >
@@ -298,7 +299,8 @@ export default function AdminPage() {
                 onChange={(event) =>
                   updateAppearance(
                     'theme',
-                    event.target.value as RunningPageConfig['appearance']['theme']
+                    event.target
+                      .value as RunningPageConfig['appearance']['theme']
                   )
                 }
               >
@@ -314,7 +316,8 @@ export default function AdminPage() {
                 onChange={(event) =>
                   updateAppearance(
                     'theme_preset',
-                    event.target.value as RunningPageConfig['appearance']['theme_preset']
+                    event.target
+                      .value as RunningPageConfig['appearance']['theme_preset']
                   )
                 }
               >
@@ -433,7 +436,10 @@ export default function AdminPage() {
           </div>
           <div className="mt-4 space-y-3">
             {config.site.navLinks.map((link, index) => (
-              <div className="grid gap-3 sm:grid-cols-[1fr_2fr_auto]" key={`${link.name}-${index}`}>
+              <div
+                className="grid gap-3 sm:grid-cols-[1fr_2fr_auto]"
+                key={`${link.name}-${index}`}
+              >
                 <input
                   className={inputClass}
                   value={link.name}
@@ -468,7 +474,9 @@ export default function AdminPage() {
                       ...prev,
                       site: {
                         ...prev.site,
-                        navLinks: prev.site.navLinks.filter((_, i) => i !== index),
+                        navLinks: prev.site.navLinks.filter(
+                          (_, i) => i !== index
+                        ),
                       },
                     }))
                   }
@@ -522,7 +530,8 @@ export default function AdminPage() {
                     ...prev,
                     sync: {
                       ...prev.sync,
-                      huaweiBridge: event.target.value as RunningPageConfig['sync']['huaweiBridge'],
+                      huaweiBridge: event.target
+                        .value as RunningPageConfig['sync']['huaweiBridge'],
                     },
                   }))
                 }

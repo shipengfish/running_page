@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { LocaleProvider } from './hooks/useLocale';
+import { RuntimeConfigProvider } from './hooks/useRuntimeConfig';
 import { THEME_PRESET } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -30,7 +31,9 @@ const isAdminPath = (pathname: string): boolean => {
 };
 
 function Root() {
-  const [admin, setAdmin] = useState(() => isAdminPath(window.location.pathname));
+  const [admin, setAdmin] = useState(() =>
+    isAdminPath(window.location.pathname)
+  );
 
   useEffect(() => {
     const onPopState = () => setAdmin(isAdminPath(window.location.pathname));
@@ -38,7 +41,13 @@ function Root() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  return admin ? <AdminPage /> : <ThemeComponent />;
+  return admin ? (
+    <AdminPage />
+  ) : (
+    <RuntimeConfigProvider>
+      <ThemeComponent />
+    </RuntimeConfigProvider>
+  );
 }
 
 export default function App() {

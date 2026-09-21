@@ -222,8 +222,13 @@ class Joyrun:
             auth=self.auth.reload(payload),
         )
         if not r.ok:
-            raise Exception("get runs records error")  # noqa: TRY002
-        return [i["fid"] for i in r.json()["datas"]]
+            raise Exception(f"get runs records error: HTTP {r.status_code}")  # noqa: TRY002
+        body = r.json()
+        if "datas" not in body:
+            raise Exception(  # noqa: TRY002
+                f"get runs records error: {body.get('ret', '')} {body.get('msg', body)}"
+            )
+        return [i["fid"] for i in body["datas"]]
 
     @staticmethod
     def parse_content_to_ponits(content):

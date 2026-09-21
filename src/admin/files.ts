@@ -88,8 +88,7 @@ const replaceEnv = (
   key: string,
   value: string | number | boolean
 ): string => {
-  const rendered =
-    typeof value === 'boolean' ? String(value) : String(value);
+  const rendered = typeof value === 'boolean' ? String(value) : String(value);
   const pattern = new RegExp(`^  ${key}:.*$`, 'm');
   if (!pattern.test(source)) {
     throw new Error(`workflow 中找不到环境变量 ${key}`);

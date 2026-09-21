@@ -239,6 +239,7 @@ jobs:
 
       - name: Run Huawei Health via Joyrun
         if: env.HUAWEI_BRIDGE == 'joyrun'
+        continue-on-error: true
         env:
           JOYRUN_UID: ${{ secrets.JOYRUN_UID }}
           JOYRUN_SID: ${{ secrets.JOYRUN_SID }}

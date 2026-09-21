@@ -6,7 +6,7 @@ import {
   parseMovingTime,
   extractProvince,
 } from '../hooks/useActivities';
-import { AVATAR } from '../config';
+import { useRuntimeConfig } from '../hooks/useRuntimeConfig';
 
 interface ProfileCardProps {
   activities: Activity[];
@@ -18,6 +18,7 @@ export const ProfileCard = memo(function ProfileCard({
   filter = 'all',
 }: ProfileCardProps) {
   const { t, locale } = useLocale();
+  const { avatar } = useRuntimeConfig();
 
   // Filter activities by sport type for distance/count/time
   const filteredActivities =
@@ -90,9 +91,9 @@ export const ProfileCard = memo(function ProfileCard({
       {/* Avatar top-left + Distance */}
       <div className="flex items-center gap-4">
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-[var(--color-border)]">
-          {AVATAR ? (
+          {avatar ? (
             <img
-              src={AVATAR}
+              src={avatar}
               alt="avatar"
               className="h-full w-full object-cover"
             />
