@@ -3,10 +3,14 @@ import {
   type LazyExoticComponent,
   type ComponentType,
   Suspense,
+  useEffect,
+  useState,
 } from 'react';
 import { LocaleProvider } from './hooks/useLocale';
 import { THEME_PRESET } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 // 主题注册表 — 新增主题时在此处注册，并在 src/themes/ 下创建对应文件夹
 const themes: Record<string, LazyExoticComponent<ComponentType>> = {
@@ -17,6 +21,25 @@ const themes: Record<string, LazyExoticComponent<ComponentType>> = {
 };
 
 const ThemeComponent = themes[THEME_PRESET] ?? themes['dashboard'];
+
+const isAdminPath = (pathname: string): boolean => {
+  const rest = pathname
+    .slice(import.meta.env.BASE_URL.length)
+    .replace(/\/+$/, '');
+  return rest === 'admin' || rest.startsWith('admin/');
+};
+
+function Root() {
+  const [admin, setAdmin] = useState(() => isAdminPath(window.location.pathname));
+
+  useEffect(() => {
+    const onPopState = () => setAdmin(isAdminPath(window.location.pathname));
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  return admin ? <AdminPage /> : <ThemeComponent />;
+}
 
 export default function App() {
   return (
@@ -39,7 +62,7 @@ export default function App() {
             </div>
           }
         >
-          <ThemeComponent />
+          <Root />
         </Suspense>
       </ErrorBoundary>
     </LocaleProvider>

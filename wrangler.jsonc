@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "huanxi-running",
+  "account_id": "d18c867b6af467bc5df979419e2c4951",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG",
+      "id": "3645345b6fb34a4fa3622610ee8f079f",
+      "preview_id": "e2a645545f724ec99b64bd08096e9941"
+    }
+  ],
+  "vars": {
+    "GITHUB_REPO": "shipengfish/running_page"
+  }
+}

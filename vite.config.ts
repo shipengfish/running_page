@@ -81,6 +81,14 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+    },
+  },
   base: process.env.PATH_PREFIX ? `${process.env.PATH_PREFIX}/` : '/',
   define: {
     'import.meta.env.VERCEL': JSON.stringify(process.env.VERCEL),
