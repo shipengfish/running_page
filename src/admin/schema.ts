@@ -65,7 +65,7 @@ export const DEFAULT_CONFIG: RunningPageConfig = {
   },
   site: {
     siteTitle: 'Running Page',
-    siteUrl: 'https://huanxi.me',
+    siteUrl: 'https://run.wunian.cc',
     description: 'Personal site and blog',
     logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTtc69JxHNcmN1ETpMUX4dozAgAN6iPjWalQ&usqp=CAU',
     navLinks: [

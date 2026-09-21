@@ -6,6 +6,12 @@
   "compatibility_date": "2026-09-21",
   "workers_dev": true,
   "preview_urls": true,
+  "routes": [
+    {
+      "pattern": "run.wunian.cc",
+      "custom_domain": true
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
