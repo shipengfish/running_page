@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FullscreenControl,
-  GeoJSONSource,
   LngLatBounds,
   Map as MapLibreMap,
   NavigationControl,
@@ -24,44 +23,14 @@ export interface RouteMapProps {
   onClearSelection?: () => void;
 }
 
-type RouteFeature = {
-  type: 'Feature';
-  properties: { type: string };
-  geometry: { type: 'LineString'; coordinates: number[][] };
+type RouteLine = {
+  type: string;
+  coordinates: [number, number][];
 };
 
 type BasemapId = 'gaode' | 'openfreemap' | 'osm';
 
 const BASEMAP_ORDER: BasemapId[] = ['gaode', 'osm', 'openfreemap'];
-
-const ROUTE_CASING = {
-  id: 'routes-casing',
-  type: 'line' as const,
-  source: 'routes',
-  layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
-  paint: {
-    'line-color': '#7c2d12',
-    'line-width': 8,
-    'line-opacity': 1,
-  },
-};
-
-const ROUTE_LINE = {
-  id: 'routes',
-  type: 'line' as const,
-  source: 'routes',
-  layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
-  paint: {
-    'line-color': '#ea580c',
-    'line-width': 5,
-    'line-opacity': 1,
-  },
-};
-
-const emptyRouteSource = () => ({
-  type: 'geojson' as const,
-  data: { type: 'FeatureCollection' as const, features: [] as RouteFeature[] },
-});
 
 const rasterStyle = (
   tiles: string[],
@@ -77,7 +46,6 @@ const rasterStyle = (
       attribution,
       maxzoom: 18,
     },
-    routes: emptyRouteSource(),
   },
   layers: [
     {
@@ -86,8 +54,6 @@ const rasterStyle = (
       paint: { 'background-color': background },
     },
     { id: 'raster', type: 'raster', source: 'raster' },
-    ROUTE_CASING,
-    ROUTE_LINE,
   ],
 });
 
@@ -153,10 +119,13 @@ export function RouteMapCanvas({
   const zh = locale === 'zh';
   const panelRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const styleReadyRef = useRef(false);
   const cameraRef = useRef<CameraOptions | null>(null);
   const fittedRef = useRef<unknown>(null);
+  const routesRef = useRef<RouteLine[]>([]);
+  const selectedRef = useRef(false);
   const [provider, setProvider] = useState<BasemapId>('gaode');
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading'
@@ -177,24 +146,20 @@ export function RouteMapCanvas({
           .map(([lat, lng]) => toLngLat(lat, lng, toGcj))
           .filter((point): point is [number, number] => point !== null);
         if (coordinates.length < 2) return [];
-        return [
-          {
-            type: 'Feature' as const,
-            properties: { type: activity.type },
-            geometry: { type: 'LineString' as const, coordinates },
-          },
-        ];
+        return [{ type: activity.type, coordinates }];
       } catch {
         return [];
       }
     });
   }, [activities, selectedActivity, provider]);
 
+  routesRef.current = routes;
+  selectedRef.current = Boolean(selectedActivity);
+
   const routeBounds = useMemo(() => {
     const bounds = new LngLatBounds();
     for (const route of routes) {
-      for (const coord of route.geometry.coordinates)
-        bounds.extend(coord as [number, number]);
+      for (const coord of route.coordinates) bounds.extend(coord);
     }
     return bounds;
   }, [routes]);
@@ -211,50 +176,51 @@ export function RouteMapCanvas({
     });
   }, [routeBounds, selectedActivity]);
 
-  const drawRoutes = useCallback(() => {
+  const paintTracks = useCallback(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const data = {
-      type: 'FeatureCollection' as const,
-      features: routes,
-    };
-    try {
-      if (!map.getSource('routes')) {
-        map.addSource('routes', { type: 'geojson', data });
-      } else {
-        (map.getSource('routes') as GeoJSONSource).setData(data);
-      }
-      if (!map.getLayer('routes-casing')) {
-        map.addLayer({
-          ...ROUTE_CASING,
-          layout: { ...ROUTE_CASING.layout },
-          paint: { ...ROUTE_CASING.paint },
-        });
-      }
-      if (!map.getLayer('routes')) {
-        map.addLayer({
-          ...ROUTE_LINE,
-          layout: { ...ROUTE_LINE.layout },
-          paint: { ...ROUTE_LINE.paint },
-        });
-      }
-      map.setPaintProperty(
-        'routes-casing',
-        'line-width',
-        selectedActivity ? 10 : 5
+    const canvas = overlayRef.current;
+    if (!map || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const dpr = window.devicePixelRatio || 1;
+    const pixelW = Math.round(rect.width * dpr);
+    const pixelH = Math.round(rect.height * dpr);
+    if (canvas.width !== pixelW || canvas.height !== pixelH) {
+      canvas.width = pixelW;
+      canvas.height = pixelH;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    const selected = selectedRef.current;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    for (const route of routesRef.current) {
+      const points = route.coordinates.map(([lng, lat]) =>
+        map.project({ lng, lat })
       );
-      map.setPaintProperty('routes', 'line-width', selectedActivity ? 6 : 3);
-      if (map.getLayer('routes-casing')) map.moveLayer('routes-casing');
-      if (map.getLayer('routes')) map.moveLayer('routes');
-      map.triggerRepaint();
-    } catch {
-      return;
+      if (points.length < 2) continue;
+      ctx.strokeStyle = '#7c2d12';
+      ctx.globalAlpha = 0.95;
+      ctx.lineWidth = selected ? 8 : 3.5;
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+      ctx.strokeStyle = '#ea580c';
+      ctx.globalAlpha = selected ? 1 : 0.82;
+      ctx.lineWidth = selected ? 4.5 : 2;
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
     }
-    if (fittedRef.current !== routes) {
-      fittedRef.current = routes;
-      fitRoutes();
-    }
-  }, [routes, selectedActivity, fitRoutes]);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current || !panelRef.current) return;
@@ -289,11 +255,19 @@ export function RouteMapCanvas({
     const markReady = () => {
       styleReadyRef.current = true;
       setStatus('ready');
-      drawRoutes();
+      paintTracks();
+      if (fittedRef.current !== routesRef.current) {
+        fittedRef.current = routesRef.current;
+        fitRoutes();
+      }
     };
     map.on('load', markReady);
     map.on('style.load', markReady);
-    const observer = new ResizeObserver(() => map.resize());
+    map.on('render', paintTracks);
+    const observer = new ResizeObserver(() => {
+      map.resize();
+      paintTracks();
+    });
     observer.observe(containerRef.current);
     return () => {
       cameraRef.current = {
@@ -305,6 +279,7 @@ export function RouteMapCanvas({
       observer.disconnect();
       map.off('load', markReady);
       map.off('style.load', markReady);
+      map.off('render', paintTracks);
       map.remove();
       mapRef.current = null;
       styleReadyRef.current = false;
@@ -334,7 +309,7 @@ export function RouteMapCanvas({
     };
     const onError = (event: ErrorEvent) => {
       const message = event.error?.message || '';
-      if (/glyph|sprite|\.pbf|raster|tile|routes/i.test(message)) return;
+      if (/glyph|sprite|\.pbf|raster|tile/i.test(message)) return;
       if (
         /Failed to fetch|Could not load style|AJAXError|status (4|5)/i.test(
           message
@@ -357,8 +332,12 @@ export function RouteMapCanvas({
   }, [style, provider, retry]);
 
   useEffect(() => {
-    drawRoutes();
-  }, [drawRoutes]);
+    paintTracks();
+    if (fittedRef.current !== routes) {
+      fittedRef.current = routes;
+      fitRoutes();
+    }
+  }, [routes, paintTracks, fitRoutes]);
 
   useEffect(() => {
     let wasFullscreen = document.fullscreenElement === panelRef.current;
@@ -369,6 +348,7 @@ export function RouteMapCanvas({
         cancelAnimationFrame(frame);
         frame = requestAnimationFrame(() => {
           mapRef.current?.resize();
+          paintTracks();
           fitRoutes();
         });
       }
@@ -379,7 +359,7 @@ export function RouteMapCanvas({
       cancelAnimationFrame(frame);
       document.removeEventListener('fullscreenchange', onFullscreen);
     };
-  }, [fitRoutes]);
+  }, [fitRoutes, paintTracks]);
 
   const providerLabel =
     provider === 'gaode'
@@ -428,6 +408,11 @@ export function RouteMapCanvas({
       </div>
       <div className="route-map-body">
         <div ref={containerRef} className="h-full w-full" />
+        <canvas
+          ref={overlayRef}
+          className="route-map-track-overlay"
+          aria-hidden="true"
+        />
         {!routes.length && (
           <div className="route-map-empty" role="status">
             {zh
